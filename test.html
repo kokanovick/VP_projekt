@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VP Projekt Kokanović Karlo</title>
+  <style>
+    #map-container {
+      position: relative;
+      width: 1200px;
+      height: 800px;
+      border: 1px solid #ccc;
+      background-color: lightblue;
+    }
+    #tooltip {
+      position: absolute;
+      background-color: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+      visibility: hidden;
+    }
+    .legend {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      font-size: 12px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      margin-right: 5px;
+    }
+    #chart-container {
+      display: flex;
+      justify-content: flex-start; 
+    }
+    #pie-chart-container {
+      margin-top: 20px;
+      margin-right: 20px; 
+      display: flex;
+      justify-content: center;
+    }
+    #line-chart-container {
+      margin-top: 90px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .line {
+      fill: none;
+      stroke: steelblue;
+      stroke-width: 2px;
+    }
+    #map path {
+      stroke: #000;
+      stroke-width: 0.5px;
+    }
+    h1 {
+      text-align: center;
+    }
+    footer{
+      margin-top: 30px;
+    }
+    label {
+      font-size: larger;
+      margin-bottom: 10px;
+    }
+    select {
+      padding: 5px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Data Visualization of development parameters for European countries* in 2022</h1>
+  <h2>Map of total unemployment (age 25-74) by country:</h2>
+  <label for="cars">Choose a month:</label>
+  <select name = "month-select" id="month-select">
+    <option value="1">January</option>
+    <option value="2">February</option>
+    <option value="3">March</option>
+    <option value="4">April</option>
+    <option value="5">May</option>
+    <option value="6">June</option>
+    <option value="7">July</option>
+    <option value="8">August</option>
+    <option value="9">September</option>
+    <option value="10">October</option>
+    <option value="11">November</option>
+    <option value="12">December</option>
+  </select>  
+  <div id="map-container">
+    <svg id="map"></svg>
+    <div id="tooltip"></div>
+    <div class="legend"></div>
+  </div>
+  <div id="chart-container"> 
+    <div class="chart-container">
+      <h2 class="chart-title" id="pie-chart-title"></h2>
+      <div id="pie-chart-container"></div>
+    </div>
+    <div class="chart-container">
+      <h2 class="chart-title" id="line-chart-title"></h2>
+      <div id="line-chart-container"></div>
+    </div>
+  </div>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script>
+    d3.csv("unemployment.csv").then(function(data) {
+      const width = 1000;
+      const height = 800;
+      const radius = Math.min(width, height) / 4;
+      const svg = d3.select("#map")
+        .attr("width", width)
+        .attr("height", height);
+      const maxRate = d3.max(data, d => +d.total_unemployment);
+      const minRate = d3.min(data, d => +d.total_unemployment);
+      const colorScale = d3.scaleSequential()
+        .domain([minRate, maxRate])
+        .interpolator(d3.interpolateReds);
+      d3.json("europe.geojson").then(function(geojson) {
+        const projection = d3.geoMercator()
+          .fitSize([width, height], geojson);
+        const pathGenerator = d3.geoPath()
+          .projection(projection);
+          
+        const updateMap = function(selectedMonth) {
+          const filteredData = data.filter(d => parseInt(d.month) === selectedMonth);
+          const handleMouseOver = function(event, d) {
+            const countryData = filteredData.find(country => country.country === d.properties.NAME);
+            const totalUnemploymentRate = countryData ? +countryData.total_unemployment : null;
+            const tooltip = d3.select("#tooltip");
+            tooltip.style("visibility", "visible")
+              .html(`<strong>${d.properties.NAME}</strong><br>
+                    Total Unemployment: ${totalUnemploymentRate !== null ? totalUnemploymentRate + '%' : 'N/A (Not in EU)'}<br>`)
+              .style("left", (event.pageX + 10) + "px")
+              .style("top", (event.pageY - 80) + "px");
+            };
+          const handleMouseOut = function() {
+            d3.select("#tooltip").style("visibility", "hidden");
+            };
+          
+            svg.selectAll("path")
+              .data(geojson.features)
+              .join("path")
+              .attr("d", pathGenerator)
+              .transition() 
+              .duration(500)
+              .attr("fill", function(d) {
+                const countryData = filteredData.find(country => country.country === d.properties.NAME);
+                const unemploymentRate = countryData ? +countryData.total_unemployment : null;
+                return unemploymentRate !== null ? colorScale(unemploymentRate) : "#808080";
+              });
+
+            svg.selectAll("path")
+              .on("mouseover", function(event, d) {
+                handleMouseOver(event, d);
+              })
+              .on("mouseout", function() {
+                handleMouseOut();
+              });
+            };
+        const legendData = colorScale.ticks(5).map(d => Math.round(d));
+          const legendColors = legendData.map(d => colorScale(d));
+          const legend = d3.select(".legend")
+            .selectAll(".legend-item")
+            .data(legendData)
+            .enter()
+            .append("div")
+            .attr("class", "legend-item");
+
+          legend.append("div")
+            .attr("class", "legend-color")
+            .style("background-color", (_, i) => legendColors[i]);
+
+          legend.append("span")
+            .text((d, i) => {
+              const lowerBound = i > 0 ? legendData[i - 1] : 0;
+              const upperBound = d;
+              return `${lowerBound}% - ${upperBound}%`;
+            });
+
+          const grayLegendItem = d3.select(".legend")
+            .append("div")
+            .attr("class", "legend-item");
+
+          grayLegendItem.append("div")
+            .attr("class", "legend-color")
+            .style("background-color", "#808080");
+
+          grayLegendItem.append("span")
+            .text("N/A (Not in EU)");  
+
+        let selectedCountry = "";
+        const monthSelect = document.getElementById("month-select");
+        monthSelect.addEventListener("change", function(event) {
+          const selectedMonth = parseInt(monthSelect.value);
+          updateMap(selectedMonth);
+          updatePieChart(selectedCountry, selectedMonth);
+        });
+
+        updateMap(parseInt(monthSelect.value));
+        const pieSvg = d3.select("#pie-chart-container")
+          .append("svg")
+          .attr("width", width)
+          .attr("height", height / 2);
+
+        const pieData = [
+          { label: "Male", value: 0 },
+          { label: "Female", value: 0 }
+        ];
+
+        const pie = d3.pie()
+          .value(d => d.value)
+          .sort(null);
+
+        const arc = d3.arc()
+          .innerRadius(0)
+          .outerRadius(radius);
+
+        const arcs = pieSvg.selectAll("path")
+          .data(pie(pieData))
+          .enter()
+          .append("path")
+          .attr("transform", `translate(${width / 4},${height / 4})`)
+          .attr("d", arc)
+          .attr("fill", (_, i) => i === 0 ? "#4e79a7" : "#f28e2b");
+
+        const arcLabel = d3.arc()
+          .innerRadius(0)
+          .outerRadius(radius * 0.8);
+        const customText = ["Male", "Female"];
+
+        const captionLabels = pieSvg.selectAll("text.caption")
+          .data(pie(pieData))
+          .enter()
+          .append("text")
+          .attr("class", "caption")
+          .attr("transform", function(d) {
+            const centroid = arcLabel.centroid(d);
+            const x = centroid[0] + width / 4;
+            const y = centroid[1] + height / 4;
+            return `translate(${x}, ${y})`;
+          })
+          .attr("dy", "1.2em")
+          .attr("text-anchor", "middle")
+          .style("font-size", "20px")
+          .text('');
+
+        let pieChartTitle;
+        let lineGraphTitle;  
+        const updatePieChart = function(countryName, selectedMonth) {
+          const filteredData = data.filter(d => parseInt(d.month) === selectedMonth);
+          const countryData = filteredData.find(country => country.country === countryName);
+          
+          if (countryData) {
+            pieData[0].value = +countryData.male_unemployment;
+            pieData[1].value = +countryData.female_unemployment;
+          
+            arcs.data(pie(pieData))
+              .transition()
+              .duration(500)
+              .attr("d", arc);
+          
+            captionLabels.data(pie(pieData))
+              .transition()
+              .duration(500)
+              .attr("transform", function(d) {
+                const centroid = arcLabel.centroid(d);
+                const x = centroid[0] + width / 4;
+                const y = centroid[1] + height / 4;
+                return `translate(${x}, ${y})`;
+              })
+              .text((d, i) => {
+                if (countryName) {
+                  const labelText = customText[i];
+                  const valueText = d.data.value !== 0 ? d.data.value : '';
+                  return `${labelText}: ${valueText / 2}%`;
+                } else {
+                  return '';
+                }
+              });
+          
+            pieSvg.style("display", "block");
+            pieChartTitle = `${countryName} - Gender distribution of total unemployment:`;
+          } else {
+            pieSvg.style("display", "none");
+            pieChartTitle = null;
+          }
+        };
+        const importDataPromise = d3.csv("imports.csv");
+        const exportDataPromise = d3.csv("exports.csv");
+
+        Promise.all([importDataPromise, exportDataPromise]).then(function(data) {
+          const importData = data[0];
+          const exportData = data[1];
+          const lineGraphHeight = height / 4;
+          let lineGraphTitle;  
+          const lineGraphSvg = d3.select("#line-chart-container")
+              .append("svg")
+              .attr("width", width)
+              .attr("height", lineGraphHeight + 80)
+              .style("display", "none");
+
+              const updateLineGraph = function(countryName) {
+              lineGraphSvg.selectAll("*").remove();
+              if (countryName in importData[0]) {
+                const lineGraphDataImports = importData.map(d => Number(d[countryName])).slice(0);
+                const lineGraphDataExports = exportData.map(d => Number(d[countryName])).slice(0);
+                let scaler, smaller;
+                if (d3.max(lineGraphDataImports) > d3.max(lineGraphDataExports)) {
+                  scaler = lineGraphDataImports;
+                } else {
+                  scaler = lineGraphDataExports;
+                }
+                if (d3.min(lineGraphDataImports) > d3.min(lineGraphDataExports)) {
+                  smaller = lineGraphDataExports;
+                } else {
+                  smaller = lineGraphDataImports;
+                }
+                const xScale = d3.scaleBand()
+                  .domain(d3.range(scaler.length))
+                  .range([0, width]);
+
+                const yMax = d3.max(scaler);
+                const yMin = d3.min(smaller);
+                const yScale = d3.scaleLinear()
+                  .domain([yMin * 0.95, yMax * 1.05]) // To fully render y axis values
+                  .range([lineGraphHeight, 0]);
+                const line = d3.line()
+                  .x((_, i) => xScale(i) + xScale.bandwidth() / 2)
+                  .y(d => yScale(d));
+
+                lineGraphSvg.append("path")
+                  .datum(lineGraphDataImports)
+                  .attr("class", "line")
+                  .attr("d", line)
+                  .style("opacity", 0) 
+                  .transition() 
+                  .delay(500) 
+                  .duration(1000) 
+                  .style("opacity", 1) 
+                  .attr("d", line); 
+
+                lineGraphSvg.append("path")
+                  .datum(lineGraphDataExports)
+                  .attr("class", "line")
+                  .style("stroke", "red")
+                  .attr("d", line)
+                  .style("opacity", 0) 
+                  .transition() 
+                  .delay(500) 
+                  .duration(1000)
+                  .style("opacity", 1) 
+                  .attr("d", line); 
+
+                lineGraphSvg.append("g")
+                  .attr("transform", `translate(0, ${lineGraphHeight})`)
+                  .call(d3.axisBottom(xScale).tickFormat((d, i) => {
+                    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    return months[d];
+                  }));
+
+                lineGraphSvg.append("g")
+                  .attr("transform", `translate(40, 0)`)
+                  .call(d3.axisLeft(yScale)
+                    .ticks(scaler.length)
+                    .tickFormat(d3.format(""))
+                  );
+
+                lineGraphSvg.style("display", "block");
+                lineGraphTitle = `${countryName} - Total imports and exports for each month (in mil. €):`;
+
+                const handleMouseOverLine = function(event, d) {
+                  const tooltip = d3.select("#tooltip");
+                  tooltip.style("visibility", "visible")
+                    .html(`${d}&nbspmillion&nbsp€`) //Adding spacing, because space button is a new row
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY - 150) + "px")
+                };
+
+                const handleMouseOutLine = function() {
+                  d3.select("#tooltip").style("visibility", "hidden");
+                };
+
+                lineGraphSvg.selectAll("circle")
+                  .data(scaler)
+                  .enter()
+                  .append("circle")
+                  .attr("cx", (_, i) => xScale(i) + xScale.bandwidth() / 2)
+                  .attr("cy", d => yScale(d))
+                  .attr("r", 5)
+                  .on("mouseover", handleMouseOverLine)
+                  .on("mouseout", handleMouseOutLine)
+                  .style("opacity", 0)
+                  .transition() 
+                  .delay(1000) 
+                  .duration(1000) 
+                  .style("opacity", 1); 
+
+                lineGraphSvg.selectAll("circle2")
+                  .data(smaller)
+                  .enter()
+                  .append("circle")
+                  .attr("cx", (_, i) => xScale(i) + xScale.bandwidth() / 2)
+                  .attr("cy", d => yScale(d))
+                  .attr("r", 5)
+                  .on("mouseover", handleMouseOverLine)
+                  .on("mouseout", handleMouseOutLine)
+                  .style("opacity", 0) 
+                  .transition()
+                  .delay(1000) 
+                  .duration(1000) 
+                  .style("opacity", 1); 
+              } else {
+                lineGraphSvg.style("display", "none");
+                lineGraphTitle = null;
+              }
+
+              const lineGraphLegend = lineGraphSvg.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${width - 70}, 0)`);
+
+              lineGraphLegend.append("rect")
+                .attr("width", 20)
+                .attr("height", 20)
+                .style("fill", "steelblue");
+
+              lineGraphLegend.append("text")
+                .attr("x", 30)
+                .attr("y", 15)
+                .text("Imports");
+
+              lineGraphLegend.append("rect")
+                .attr("width", 20)
+                .attr("height", 20)
+                .attr("y", 25)
+                .style("fill", "red");
+
+              lineGraphLegend.append("text")
+                .attr("x", 30)
+                .attr("y", 40)
+                .text("Exports");
+            };
+
+            const updateChartTitles = function() {
+              const pieChartTitleElement = document.getElementById("pie-chart-title");
+              const lineGraphTitleElement = document.getElementById("line-chart-title");
+              if (pieChartTitle) {
+                pieChartTitleElement.textContent = pieChartTitle;
+                pieChartTitleElement.style.display = "block";
+              } else {
+                pieChartTitleElement.style.display = "none";
+              }
+
+              if (lineGraphTitle) {
+                lineGraphTitleElement.textContent = lineGraphTitle;
+                lineGraphTitleElement.style.display = "block";
+              } else {
+                lineGraphTitleElement.style.display = "none";
+              }
+            };
+
+          svg.selectAll("path")
+            .on("click", function(event, d) {
+              const selectedMonth = parseInt(monthSelect.value);
+              selectedCountry = d.properties.NAME;
+              updatePieChart(d.properties.NAME, selectedMonth);
+              updateLineGraph(d.properties.NAME);
+              updateChartTitles();
+            });
+        });
+    });
+});
+
+  </script>
+</body>
+<footer>* - 27 EU members + Switzerland, Iceland and Norway</footer>
+</html>
